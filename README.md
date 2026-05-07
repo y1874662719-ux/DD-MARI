@@ -40,33 +40,33 @@ DD-MARI 解决了自动化文档质量评估（DQA）中的三个黑箱问题：
 ┌─────────────────────────────────────────────────────────────────┐
 │                    DD-MARI Pipeline                             │
 │                                                                 │
-│  Phase 2: Cold Start          Phase 3: Iterative Optimization  │
-│  阶段2：冷启动                  阶段3：迭代优化                    │
-│  ┌──────────────────┐         ┌──────────────────────────────┐ │
-│  │ Standard         │         │ Defect      Feature          │ │
-│  │ Generation  ───► │ R₀      │ Diagnosis ──Library (RAG)    │ │
-│  │ Agent (SGA) │    │ ──────► │ Agent       ▼                │ │
-│  │ 标准生成智能体│    │         │ (DDA)   Rule Optimization    │ │
-│  └─────────────┘    │         │ 缺陷诊断    Agent (ROA)       │ │
-│  Spearman-guided    │         │ 智能体      规则优化智能体      │ │
-│  selection          │         │                 ▼            │ │
-│  Spearman引导选择    │         │ Scoring Agent (SA) + Rollback│ │
-│                     │         │ 评分智能体 + 回滚机制           │ │
-│                     │         └──────────────────────────────┘ │
+│  Phase 2: Cold Start          Phase 3: Iterative Optimization   │
+│  阶段2：冷启动                  阶段3：迭代优化                   │
+│  ┌──────────────────┐         ┌──────────────────────────────┐  │
+│  │ Standard         │         │ Defect      Feature          │  │
+│  │ Generation  ───► │ R₀      │ Diagnosis ──Library (RAG)    │  │
+│  │ Agent (SGA) │    │ ──────► │ Agent       ▼                │  │
+│  │ 标准生成智能体│    │         │ (DDA)   Rule Optimization   │  │
+│  └─────────────┘    │         │ 缺陷诊断    Agent (ROA)       │  │
+│  Spearman-guided    │         │ 智能体      规则优化智能体     │  │
+│  selection          │         │                 ▼            │  │
+│  Spearman引导选择    │         │ Scoring Agent (SA) + Rollback│  │
+│                     │         │ 评分智能体 + 回滚机制          │  │
+│                     │         └──────────────────────────────┘  │
 │                                                                 │
-│  Phase 4: Cognitive-Aligned Execution (subjective tasks)       │
-│  阶段4：认知对齐执行（主观任务）                                    │
-│  ┌────────────────────────────────────────────────────────┐    │
-│  │ Agent A (length-sensitive) ──┐                         │    │
-│  │ 智能体A（长度敏感）             ├─► N = |Sₐ−S_b|         │    │
-│  │ Agent B (desensitized)   ────┘   长度依赖指数 ↓          │    │
-│  │ 智能体B（脱敏）                   Verbosity Filter        │    │
-│  │                                  冗余过滤                 │    │
-│  │                                        ↓                │    │
-│  │                              Nonlinear Calibration      │    │
-│  │                              非线性校准                   │    │
-│  │                              f(s) = s + κΣ(·)^αᵢ        │    │
-│  └────────────────────────────────────────────────────────┘    │
+│  Phase 4: Cognitive-Aligned Execution (subjective tasks)        │
+│  阶段4：认知对齐执行（主观任务）                                   │
+│  ┌────────────────────────────────────────────────────────┐     │
+│  │ Agent A (length-sensitive) ──┐                         │     │
+│  │ 智能体A（长度敏感）             ├─► N = |Sₐ−S_b|         │     │
+│  │ Agent B (desensitized)   ────┘   长度依赖指数 ↓         │      │
+│  │ 智能体B（脱敏）                   Verbosity Filter       │     │
+│  │                                  冗余过滤               │     │
+│  │                                        ↓               │     │
+│  │                              Nonlinear Calibration     │     │
+│  │                              非线性校准                 │     │
+│  │                              f(s) = s + κΣ(·)^αᵢ       │     │
+│  └────────────────────────────────────────────────────────┘     │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
