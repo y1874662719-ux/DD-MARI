@@ -1,0 +1,31 @@
+# Environment / secrets — NEVER commit this file
+.env
+
+# Dataset files (download from Kaggle)
+data/*.xlsx
+data/*.docx
+data/*.csv
+
+# Generated output
+output/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Virtual environments
+venv/
+env/
+.venv/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
