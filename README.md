@@ -17,6 +17,10 @@ Official implementation of the paper:
 
 ---
 
+![Algorithm Overview](algorithm_overview.png)
+
+---
+
 ## Overview / 概述
 
 DD-MARI addresses three black-box problems in automated Document Quality Assessment (DQA):
