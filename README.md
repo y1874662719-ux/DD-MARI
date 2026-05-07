@@ -9,7 +9,7 @@ Official implementation of the paper:
 
 > **Beyond Black-Box Scoring: An Interpretable and Defect-Driven Few-Shot Rule Induction Framework for Document Quality Assessment**
 
-本文的官方代码实现：
+本文的代码实现：
 
 > **超越黑箱评分：一种可解释的缺陷驱动少样本规则归纳框架用于文档质量评估**
 
