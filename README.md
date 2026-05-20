@@ -16,7 +16,7 @@ Official implementation of the paper:
 
 ---
 
-![Algorithm Overview](algorithm_overview.png)
+![Algorithm Overview](algorithm.png)
 
 ---
 
