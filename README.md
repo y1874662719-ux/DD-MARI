@@ -169,18 +169,6 @@ DD-MARI/
 ---
 
 
-## Citation / 引用
-
-```bibtex
-@article{zhu2025ddmari,
-  title     = {Beyond Black-Box Scoring: An Interpretable and Defect-Driven Few-Shot
-               Rule Induction Framework for Document Quality Assessment},
-  author    = {Zhu, Haibo},
-  journal   = {IEEE Transactions on Industrial Informatics},
-  year      = {2025}
-}
-```
-
 ---
 
 ## License / 许可证
