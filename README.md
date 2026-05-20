@@ -161,4 +161,3 @@ DD-MARI/
 
 MIT License. See [LICENSE](LICENSE) for details.
 
-MIT 许可证，详见 [LICENSE](LICENSE)。
