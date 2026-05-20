@@ -13,7 +13,6 @@ Official implementation of the paper:
 本文的官方代码实现：
 
 > **超越黑箱评分：一种可解释的缺陷驱动少样本规则归纳框架用于文档质量评估**
-> *朱海波*
 
 ---
 
@@ -33,47 +32,9 @@ DD-MARI 解决了自动化文档质量评估（DQA）中的三个黑箱问题：
 | **Logical Black-Box** / **逻辑黑箱** | Naive LLM self-refinement / 朴素 LLM 自我优化 | Defect-driven multi-agent optimization / 缺陷驱动多智能体优化 |
 | **Cognitive Black-Box** / **认知黑箱** | Human–AI psychometric misalignment / 人机心理测量失配 | DBAP pre-screening + intra-loop Wasserstein calibration / DBAP 预筛选 + 循环内 Wasserstein 校准 |
 
-The framework achieves **QWK = 0.7332** on the ASAP Set 1 benchmark using only **40 training samples** — less than 4% of the data required by supervised baselines — while providing full interpretability.
-
-该框架仅使用 **40 个训练样本**（不足监督基线所需数据的 4%）即在 ASAP Set 1 基准上达到 **QWK = 0.7332**，同时提供完整的可解释性。
 
 ---
 
-## Framework Architecture / 框架架构
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        DD-MARI Pipeline                             │
-│                                                                     │
-│  Phase 1: DBAP Training Pool Filter    Dpool (40 essays)            │
-│  阶段1：DBAP 训练池过滤                  ↓ Agent A (length-sensitive) │
-│                                         ↓ Agent B (desensitized)   │
-│                                   N = |SA - SB| ≥ τN → removed     │
-│                                   Dclean → contrastive pairs        │
-│                                                                     │
-│  Phase 2: Cold Start (on Dcal)    SGA generates R1..RN             │
-│  阶段2：冷启动（基于 Dcal）          Spearman ρ on Dcal → best R0    │
-│                                   Grid search {αi} (Wasserstein)   │
-│                                   → initial calibrated QWK          │
-│                                                                     │
-│  Phase 3: Iterative Optimization  Defect     Feature               │
-│  阶段3：迭代优化                    Diagnosis ──Library (RAG)        │
-│                                   Agent        ↓                   │
-│                                   (DDA)    Rule Optimization        │
-│                                            Agent (ROA)              │
-│                                                ↓                   │
-│                               Score Dcal → Grid search {αi}        │
-│                               Calibrated QWK > best + τ? Accept    │
-│                               否则回滚 (Rollback)                   │
-│                                                                     │
-│  Final: Cognitive Purification + Calibrated Scoring                 │
-│  最终：认知净化 + 校准评分                                             │
-│  ┌──────────────────────────────────────────────────────────────┐  │
-│  │ DBAP Inference Filter (uses Rfinal) → remove N ≥ τN essays  │  │
-│  │ Score filtered holdout → apply f(s) = s + κΣ((Smax-s)/Smax)^αi│  │
-│  └──────────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────────┘
-```
 
 ---
 
@@ -107,17 +68,6 @@ Download the ASAP dataset from [Kaggle](https://www.kaggle.com/c/asap-aes/data) 
 
 从 [Kaggle](https://www.kaggle.com/c/asap-aes/data) 下载 ASAP 数据集，将文件放入 `data/` 目录：
 
-```
-data/
-├── asap_set1_gradient.xlsx    # 10–20 quality-stratified essays for cold-start calibration
-│                              # 10–20 篇质量分层样本，用于冷启动校准
-├── asap_set1_training.xlsx    # 10 gold-standard + 30 hard-negative essays (40 total)
-│                              # 10 篇金标准 + 30 篇困难负样本（共 40 篇）
-├── asap_set1_test.xlsx        # Hold-out test set (~1,643 essays from ASAP Set 1)
-│                              # 保留测试集（约 1,643 篇）
-└── Set1_standard.docx         # Official ASAP Set 1 scoring guidelines document
-                               # ASAP Set 1 官方评分标准文档
-```
 
 #### Data Format / 数据格式（Excel 列名）
 
@@ -127,13 +77,6 @@ data/
 | `essay` | Essay text (may contain `@CAPS1`, `@NUM1` etc. — privacy markers) / 作文文本（可能含有隐私标记符） |
 | `domain1_score` | ASAP combined score, **2–12 scale** (sum of two raters × 1–6 each) / ASAP 综合分，**2–12 分制**（两位评分者各 1–6 分之和） |
 
-#### Score Mapping / 分数约定
-
-DD-MARI uses the **ASAP combined score (2–12)** directly — the sum of two raters each scoring 1–6.
-Store the combined score as-is in the `domain1_score` column. No conversion is needed.
-
-DD-MARI 直接使用 **ASAP 综合分（2–12）** —— 两位评分者各 1–6 分之和。
-`domain1_score` 列直接存储综合分，无需任何转换。
 
 #### Training Pool Construction / 训练集构建
 
@@ -202,23 +145,6 @@ python main.py --eval --test_file data/asap_set1_test.xlsx --output output/resul
 
 ---
 
-## Expected Results / 预期结果（ASAP Set 1）
-
-| Method / 方法 | Train Size / 训练量 | QWK | Interpretability / 可解释性 |
-|---|---|---|---|
-| SVR + Handcrafted Features / SVR + 手工特征 | ~1,000 | 0.780 | Partial / 部分 |
-| Fine-tuned BERT-base / 微调 BERT | ~1,000 | 0.810 | None / 无 |
-| DeepSeek-V3 (Zero-Shot / 零样本) | 0 | 0.547 | High / 高 |
-| DeepSeek-V3 (Few-Shot CoT / 少样本链式思维) | 40 | 0.583 | High / 高 |
-| Single-Agent Self-Refine / 单智能体自优化 | 40 | 0.492 | Degraded / 退化 |
-| **DD-MARI (Ours / 本文方法)** | **40** | **0.7332** | **Complete / 完整** |
-
-Convergence is typically reached within **8–11 iterations** with the Spearman-guided cold start.
-
-使用 Spearman 引导的冷启动，通常在 **8–11 轮**内收敛。
-
----
-
 ## Project Structure / 项目结构
 
 ```
@@ -247,38 +173,6 @@ DD-MARI/
 
 ---
 
-## Cognitive Alignment / 认知对齐
-
-### DBAP — Double-Blind Arbitration Pre-Screener / 双盲仲裁预筛选器
-
-DBAP is applied in **two places**:
-DBAP 在**两处**使用：
-
-**Phase 1 (training pool)**: Before building contrastive pairs, DBAP screens all 40 training essays.
-Agent A (length-sensitive) and Agent B (desensitized) score each essay independently.
-Essays where `N = |SA − SB| ≥ τN` (default 3.0) are removed, preventing length-camouflaged samples from corrupting contrastive learning.
-
-**阶段1（训练池）**：构建对比样本对之前，DBAP 对全部 40 篇训练样本进行筛查。
-智能体A（长度敏感）和智能体B（脱敏）各自独立评分。
-`N = |SA − SB| ≥ τN`（默认 3.0）的样本被移除，防止长度伪装样本污染对比学习。
-
-**Final inference (holdout)**: The final rule is used with DBAP to filter the hold-out set before computing the calibrated QWK.
-**最终推理（保留集）**：使用最终规则运行 DBAP 对保留集过滤，再计算校准 QWK。
-
-### Intra-Loop Wasserstein Calibration / 循环内 Wasserstein 校准
-
-After each ROA update (and at the end of cold-start), the framework runs a grid search over all pairs `(α1, α2) ∈ CALIB_ALPHA_GRID²` to find the calibration parameters that minimize the **Wasserstein distance** between the calibrated score distribution and the true score distribution on Dcal.
-
-每次 ROA 更新后（以及冷启动结束时），框架在所有 `(α1, α2) ∈ CALIB_ALPHA_GRID²` 组合上进行网格搜索，找到使校准分数分布与 Dcal 真实分数分布之间的 **Wasserstein 距离**最小的校准参数。
-
-```
-f_calibrated(s) = s + κ Σ_{i=1}^{M} ((S_max − s) / S_max)^{α_i}    (Eq. 10)
-```
-
-The rollback decision in Phase 3 compares **calibrated QWK**, not raw QWK, ensuring the optimization target is aligned with the human rater's psychometric distribution from the start.
-阶段3的回滚判断使用**校准后的 QWK**，确保优化目标从一开始就与人类评分者的心理测量分布对齐。
-
----
 
 ## Citation / 引用
 
