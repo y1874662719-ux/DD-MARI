@@ -8,7 +8,6 @@
 Official implementation of the paper:
 
 > **Beyond Black-Box Scoring: An Interpretable and Defect-Driven Few-Shot Rule Induction Framework for Document Quality Assessment**
-> *Haibo Zhu*
 
 本文的官方代码实现：
 
@@ -31,11 +30,7 @@ DD-MARI 解决了自动化文档质量评估（DQA）中的三个黑箱问题：
 | **Parameter Black-Box** / **参数黑箱** | End-to-end neural models / 端到端神经模型 | Explicit natural-language scoring rules / 显式自然语言评分规则 |
 | **Logical Black-Box** / **逻辑黑箱** | Naive LLM self-refinement / 朴素 LLM 自我优化 | Defect-driven multi-agent optimization / 缺陷驱动多智能体优化 |
 | **Cognitive Black-Box** / **认知黑箱** | Human–AI psychometric misalignment / 人机心理测量失配 | DBAP pre-screening + intra-loop Wasserstein calibration / DBAP 预筛选 + 循环内 Wasserstein 校准 |
-
-
 ---
-
-
 ---
 
 ## Quick Start / 快速开始
