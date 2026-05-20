@@ -154,6 +154,69 @@ def load_training_pairs() -> List[Tuple[Essay, List[Essay]]]:
     return [(orig, augs) for orig, augs in pairs.values() if orig is not None and augs]
 
 
+def load_all_training_essays() -> List[Essay]:
+    """
+    Load all training pool essays as a flat list (Dpool, before DBAP filtering).
+    将训练池所有样本加载为扁平列表（Dpool，DBAP 过滤前）。
+    """
+    df = pd.read_excel(TRAINING_DATA_FILE)
+    id_col, text_col, score_col = _resolve_cols(df)
+    cm = {c.lower(): c for c in df.columns}
+
+    has_group_col = "group_id" in cm
+    has_stype_col = "sample_type" in cm
+
+    essays = []
+    for _, row in df.iterrows():
+        if pd.isna(row[text_col]):
+            continue
+        raw_score = int(row[score_col]) if pd.notna(row[score_col]) else 0
+        score = max(SCORE_MIN, min(SCORE_MAX, raw_score))
+        essay_id = str(row[id_col])
+
+        if has_group_col:
+            is_aug = str(row.get(cm.get("sample_type", ""), "")).lower() in (
+                "aug", "augmented", "negative")
+        elif has_stype_col:
+            is_aug = str(row[cm["sample_type"]]).lower() in ("aug", "augmented", "negative")
+        else:
+            is_aug = any(k in essay_id.lower() for k in ("aug", "enhanced", "negative", "neg"))
+
+        essays.append(Essay(
+            essay_id=essay_id,
+            sample_type=SampleType.NEGATIVE if is_aug else SampleType.GOLD,
+            essay_content=str(row[text_col]),
+            true_score=score,
+        ))
+
+    print(f"[Data] Loaded {len(essays)} training pool essays (Dpool).")
+    return essays
+
+
+def build_training_pairs(essays: List[Essay]) -> List[Tuple[Essay, List[Essay]]]:
+    """
+    Build (gold, [negative]) contrastive pairs from a flat list of essays.
+    从扁平样本列表构建（金标准，[负样本]）对比样本对。
+    Group key is inferred from the numeric segment of essay_id.
+    组键从 essay_id 的数字段推断（如 orig_3 → "3", neg_3_1 → "3"）。
+    """
+    pairs: Dict[str, Tuple[Optional[Essay], List[Essay]]] = {}
+
+    for essay in essays:
+        parts = essay.essay_id.split("_")
+        gid = parts[1] if len(parts) >= 2 else parts[0]
+
+        if gid not in pairs:
+            pairs[gid] = (None, [])
+
+        if essay.sample_type == SampleType.NEGATIVE:
+            pairs[gid][1].append(essay)
+        else:
+            pairs[gid] = (essay, pairs[gid][1])
+
+    return [(orig, augs) for orig, augs in pairs.values() if orig is not None and augs]
+
+
 def load_test_set() -> List[Essay]:
     """Hold-out test set for final QWK evaluation.
     用于最终 QWK 评估的保留测试集。

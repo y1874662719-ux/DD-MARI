@@ -27,6 +27,7 @@ STANDARD_DOC_FILE   = DATA_DIR / "Set1_standard.docx"         # Official ASAP Se
 RULE_HISTORY_FILE   = OUTPUT_DIR / "rule_history.json"
 FEATURE_LIB_FILE    = OUTPUT_DIR / "feature_library.json"
 FINAL_RULE_FILE     = OUTPUT_DIR / "final_rule.json"
+FINAL_ALPHAS_FILE   = OUTPUT_DIR / "final_alphas.json"
 EVAL_RESULT_FILE    = OUTPUT_DIR / "evaluation_result.xlsx"
 
 # ==================== LLM Configuration / LLM 配置 ====================
@@ -60,7 +61,15 @@ ENABLE_COGNITIVE_ALIGNMENT = True
 # Calibration hyperparameters — Eq.(10) in the paper
 # 校准超参数 —— 论文公式(10)
 CALIB_KAPPA  = 1.0              # κ: unit mapping amplitude / κ：单位映射幅度
-CALIB_ALPHAS = [0.5, 1.2]       # {α_1, α_2}: psychological damping coefficients / {α_1, α_2}：心理阻尼系数
+CALIB_ALPHAS = [0.5, 1.2]       # {α_1, α_2}: default psychological damping coefficients / 默认心理阻尼系数
+
+# DBAP threshold — τN: essays with |SA - SB| >= DBAP_THRESHOLD are filtered (Phase 1 & inference)
+# DBAP 阈值 —— τN：|SA - SB| >= 阈值的样本被过滤（阶段1 和推理期）
+DBAP_THRESHOLD = 3.0
+
+# Grid search candidates for αi in intra-loop Wasserstein calibration (Phase 3)
+# 阶段3 循环内 Wasserstein 校准的 αi 网格搜索候选值
+CALIB_ALPHA_GRID = [0.3, 0.5, 0.8, 1.0, 1.2, 1.5, 2.0]
 
 # ==================== Task Mode / 任务模式 ====================
 # "structured"   → power grid / compliance documents (alignment disabled)

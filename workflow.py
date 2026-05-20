@@ -3,11 +3,17 @@ DD-MARI Main Workflow / DD-MARI 主工作流
 Implements Algorithm 1 from the paper:
 实现论文中的算法1：
 
-  Phase 1 — Contrastive Sample Construction / 阶段1 — 对比样本构建
-  Phase 2 — Spearman-Guided Cold-Start Initialization / 阶段2 — Spearman 引导的冷启动初始化
-  Phase 3 — RAG-Enhanced Iterative Optimization / 阶段3 — RAG 增强的迭代优化
-  Phase 4 — Cognitive-Aligned Execution  (subjective tasks only)
-             认知对齐执行（仅用于主观任务）
+  Phase 1 — DBAP Training Pool Filtering (Dpool → Dclean)
+  阶段1 — DBAP 训练池过滤（Dpool → Dclean）
+
+  Phase 2 — Spearman-Guided Cold-Start Initialization (on Dcal)
+  阶段2 — Spearman 引导的冷启动初始化（基于 Dcal）
+
+  Phase 3 — RAG-Enhanced Iterative Optimization with Intra-Loop Calibration
+  阶段3 — 带循环内校准的 RAG 增强迭代优化
+
+  Final  — Cognitive Purification Filter (DBAP inference) + Calibrated QWK on holdout
+  最终   — 认知净化过滤器（DBAP 推理）+ 保留集上的校准 QWK
 """
 
 import json
@@ -17,12 +23,17 @@ from scipy.stats import spearmanr
 from config import (
     MAX_ITERATIONS, BATCH_SIZE, ROLLBACK_THRESHOLD,
     RAG_TOP_K, HUMAN_IN_THE_LOOP, TASK_MODE,
-    RULE_HISTORY_FILE, FINAL_RULE_FILE,
+    RULE_HISTORY_FILE, FINAL_RULE_FILE, FINAL_ALPHAS_FILE,
     ITER_EVAL_SIZE, ITER_EVAL_SEED,
+    CALIB_ALPHAS, CALIB_KAPPA, SCORE_MAX, CALIB_ALPHA_GRID,
 )
 from data_models import Essay, ScoringRule, FeatureEntry
 from agents import run_sga, run_sa, run_dda, run_roa
 from evaluator import calculate_qwk, calculate_qwk_detailed
+from cognitive_alignment import (
+    dbap_filter, dbap_inference_filter,
+    grid_search_alphas, apply_calibration_to_records,
+)
 import data_manager as dm
 
 
@@ -31,7 +42,6 @@ import data_manager as dm
 # ──────────────────────────────────────────────────────────────────
 
 def _save_rule(rule: ScoringRule, is_final: bool = False) -> None:
-    # Append to history / 追加到历史记录
     history = []
     if RULE_HISTORY_FILE.exists():
         with open(RULE_HISTORY_FILE, "r", encoding="utf-8") as f:
@@ -46,6 +56,11 @@ def _save_rule(rule: ScoringRule, is_final: bool = False) -> None:
         print(f"[Workflow] Final rule saved → {FINAL_RULE_FILE.name}")
 
 
+def _save_alphas(alphas: List[float]) -> None:
+    with open(FINAL_ALPHAS_FILE, "w", encoding="utf-8") as f:
+        json.dump(alphas, f)
+
+
 def _load_latest_rule() -> Optional[ScoringRule]:
     if not RULE_HISTORY_FILE.exists():
         return None
@@ -54,61 +69,79 @@ def _load_latest_rule() -> Optional[ScoringRule]:
     return ScoringRule.from_dict(history[-1]) if history else None
 
 
+def _load_saved_alphas() -> List[float]:
+    if FINAL_ALPHAS_FILE.exists():
+        with open(FINAL_ALPHAS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return list(CALIB_ALPHAS)
+
+
 # ──────────────────────────────────────────────────────────────────
-# Phase 2 — Spearman-Guided Cold-Start Initialization
-# 阶段2 — Spearman 引导的冷启动初始化
+# Phase 2 — Spearman-Guided Cold-Start Initialization (on Dcal)
+# 阶段2 — Spearman 引导的冷启动初始化（基于 Dcal）
 # ──────────────────────────────────────────────────────────────────
 
-def cold_start(doc_content: str,
-               gradient_essays: List[Essay],
-               d_cal: List[Essay],
-               anchor_text: str,
-               num_candidates: int = 3) -> ScoringRule:
+def cold_start(
+    doc_content: str,
+    d_cal: List[Essay],
+    anchor_text: str,
+    num_candidates: int = 3,
+) -> Tuple[ScoringRule, List[float]]:
     """
-    Generate N candidate rules via SGA, evaluate each on the quality-stratified
-    calibration set using Spearman rank correlation (Eq. 5–6), select the best
-    candidate, then compute its initial Dcal QWK as the Phase 3 rollback baseline.
-    通过 SGA 生成 N 个候选规则，使用 Spearman 秩相关（公式5–6）在质量分层校准集上评估每个候选，
-    选择最优候选，然后在 Dcal 上计算初始 QWK 作为阶段3回滚基线。
+    Generate N candidate rules via SGA, evaluate each on Dcal using Spearman rank
+    correlation (Eq. 5), select the best candidate, then run intra-loop grid search
+    over {αi} to find initial calibration parameters minimizing Wasserstein distance.
+    通过 SGA 生成 N 个候选规则，使用 Spearman 秩相关（公式5）在 Dcal 上评估每个候选，
+    选择最优候选，然后通过网格搜索找到最小化 Wasserstein 距离的初始校准参数 {αi}。
+
+    Returns / 返回: (R0, initial_alphas)
     """
     print("\n[Phase 2] Cold-Start Initialization")
     candidates = run_sga(doc_content, num_variants=num_candidates)
 
     best_rule: Optional[ScoringRule] = None
     best_rho = -1.0
+    best_records = []
 
-    gold_ranks = [e.true_score for e in gradient_essays]   # Y_gold / 真实排名
+    gold_ranks = [e.true_score for e in d_cal]
 
     for idx, rule in enumerate(candidates):
-        records = run_sa(rule, gradient_essays, anchor_text)
+        records = run_sa(rule, d_cal, anchor_text)
         pred_map = {r.essay_id: r.predicted_score for r in records}
-        pred_ranks = [pred_map.get(e.essay_id, 0) for e in gradient_essays]
+        pred_ranks = [pred_map.get(e.essay_id, 0) for e in d_cal]
 
-        rho, _ = spearmanr(gold_ranks, pred_ranks)          # Eq. (5) / 公式(5)
+        rho, _ = spearmanr(gold_ranks, pred_ranks)        # Eq. (5) / 公式(5)
         print(f"  Candidate {idx + 1}: Spearman rho = {rho:.4f}")
 
         if rho > best_rho:
             best_rho = rho
             best_rule = rule
+            best_records = records
 
     print(f"[Phase 2] Best candidate (rho = {best_rho:.4f}) selected as R0.")
 
-    # Compute initial Dcal QWK — must match Phase 3 rollback metric
-    # 计算初始 Dcal QWK —— 必须与阶段3回滚指标一致
-    print(f"[Phase 2] Computing initial Dcal QWK for R0 ({len(d_cal)} essays)...")
-    d_cal_records = run_sa(best_rule, d_cal, anchor_text)
-    qwk = calculate_qwk(d_cal, d_cal_records)
+    # Grid search for initial calibration alphas on Dcal
+    # 在 Dcal 上网格搜索初始校准参数
+    raw_scores = [r.predicted_score for r in best_records]
+    true_scores = [e.true_score for e in d_cal]
+    best_alphas = grid_search_alphas(raw_scores, true_scores, SCORE_MAX, CALIB_KAPPA, CALIB_ALPHA_GRID)
+    print(f"[Phase 2] Initial calibration alphas: {best_alphas}")
+
+    # Compute initial Dcal calibrated QWK as Phase 3 rollback baseline
+    # 计算初始 Dcal 校准 QWK 作为阶段3回滚基线
+    cal_records = apply_calibration_to_records(best_records, best_alphas)
+    qwk = calculate_qwk(d_cal, cal_records)
     best_rule.qwk_score = qwk
     best_rule.rule_id = "v0"
-    print(f"[Phase 2] Initial Dcal QWK = {qwk:.4f}")
+    print(f"[Phase 2] Initial Dcal calibrated QWK = {qwk:.4f}")
 
     _save_rule(best_rule)
-    return best_rule
+    return best_rule, best_alphas
 
 
 # ──────────────────────────────────────────────────────────────────
 # Phase 3 — RAG-Enhanced Iterative Optimization
-# 阶段3 — RAG 增强的迭代优化
+# 阶段3 — RAG 增强迭代优化
 # ──────────────────────────────────────────────────────────────────
 
 def _human_review(iteration: int, analysis: dict) -> str:
@@ -134,42 +167,36 @@ def _human_review(iteration: int, analysis: dict) -> str:
 
 def iterative_optimization(
     initial_rule: ScoringRule,
+    initial_alphas: List[float],
     training_pairs: List[Tuple[Essay, List[Essay]]],
     d_cal: List[Essay],
     anchor_text: str,
     start_iteration: int = 1,
-) -> ScoringRule:
+) -> Tuple[ScoringRule, List[float]]:
     """
-    Defect-driven RAG-enhanced optimization loop (Algorithm 1, Phase 3).
-    缺陷驱动的 RAG 增强优化循环（算法1，阶段3）。
-
-    Rollback decisions are made on Dcal (100 randomly sampled essays),
-    NOT on the hold-out test set, matching Algorithm 1 line 30 in the paper.
-    回滚决策在 Dcal（100 篇随机抽样作文）上进行，而非保留测试集，对应论文算法1第30行。
+    Defect-driven RAG-enhanced optimization loop with intra-loop calibration (Algorithm 1, Phase 3).
+    带循环内校准的缺陷驱动 RAG 增强优化循环（算法1，阶段3）。
 
     For each iteration / 每轮迭代:
       1. Sample a mini-batch of (original, augmented) pairs
-         采样一个（原始，增强）样本对的小批量
-      2. Score with current rule  → detect scoring inversions (Eq. 4)
-         用当前规则评分 → 检测评分倒置（公式4）
+      2. Score with current rule → detect scoring inversions (Eq. 4)
       3. DDA diagnoses root-cause features
-         DDA 诊断根因特征
       4. [Optional] Human validates features
-         [可选] 人工验证特征
-      5. RAG retrieves top-k features from library
-         RAG 从特征库检索 top-k 特征
-      6. ROA proposes an updated rule
-         ROA 提出更新后的规则
-      7. Validate on Dcal → rollback if QWK does not improve by τ
-         在 Dcal 上验证 → 若 QWK 未提升 τ 则回滚
+      5. Update feature library; RAG retrieves top-k features
+      6. ROA proposes an updated rule Rnew
+      7. Score Dcal with Rnew → grid search {αi} → calibrated QWK
+      8. Rollback if calibrated QWK does not improve by τ (Algorithm 1 line 30)
+
+    Returns / 返回: (final_rule, final_alphas)
     """
     print("\n[Phase 3] Iterative Optimization Started")
-    print(f"  Rollback evaluated on Dcal ({len(d_cal)} essays).")
+    print(f"  Rollback evaluated on Dcal ({len(d_cal)} essays) with intra-loop calibration.")
     best_rule = initial_rule
+    best_alphas = list(initial_alphas)
 
     for i in range(start_iteration, MAX_ITERATIONS + 1):
         print(f"\n  --- Iteration {i}/{MAX_ITERATIONS}  "
-              f"(Best Dcal QWK: {best_rule.qwk_score:.4f}) ---")
+              f"(Best Dcal calibrated QWK: {best_rule.qwk_score:.4f}) ---")
 
         # 1. Sample mini-batch / 采样小批量
         batch = dm.sample_batch(training_pairs, BATCH_SIZE)
@@ -197,7 +224,7 @@ def iterative_optimization(
             print("  No scoring inversions detected — rule is stable on this batch.")
             continue
 
-        aug = anomalies[0]  # process first anomaly / 处理第一个异常
+        aug = anomalies[0]
         print(f"  Inversion detected: orig score={orig_rec.predicted_score} "
               f"(true={orig.true_score})  aug score={rec_map[aug.essay_id].predicted_score} "
               f"(true={aug.true_score})")
@@ -234,44 +261,31 @@ def iterative_optimization(
         new_rule = run_roa(best_rule, analysis, retrieved_features, expert_feedback)
         new_rule.rule_id = f"v{i}"
 
-        # 8. Validate on Dcal (rollback if no improvement — Algorithm 1 line 30)
-        # 在 Dcal 上验证（无提升则回滚 —— 算法1第30行）
-        print("  Validating updated rule on Dcal...")
+        # 8. Score Dcal → grid search alphas → calibrated QWK → rollback decision
+        # 在 Dcal 上评分 → 网格搜索 alphas → 校准 QWK → 回滚决策
+        print("  Validating updated rule on Dcal (intra-loop calibration)...")
         d_cal_records = run_sa(new_rule, d_cal, anchor_text)
-        new_qwk = calculate_qwk(d_cal, d_cal_records)
-        print(f"  Dcal QWK: {new_qwk:.4f}  (delta = {new_qwk - best_rule.qwk_score:+.4f})")
+        raw_scores = [r.predicted_score for r in d_cal_records]
+        true_scores_dcal = [e.true_score for e in d_cal]
+        new_alphas = grid_search_alphas(raw_scores, true_scores_dcal, SCORE_MAX, CALIB_KAPPA, CALIB_ALPHA_GRID)
+        cal_records = apply_calibration_to_records(d_cal_records, new_alphas)
+        new_qwk = calculate_qwk(d_cal, cal_records)
+        print(f"  Dcal calibrated QWK: {new_qwk:.4f}  "
+              f"(delta = {new_qwk - best_rule.qwk_score:+.4f})  alphas = {new_alphas}")
 
         if new_qwk > best_rule.qwk_score + ROLLBACK_THRESHOLD:
             best_rule = new_rule
             best_rule.qwk_score = new_qwk
+            best_alphas = new_alphas
             _save_rule(best_rule, is_final=False)
             print("  Rule accepted.")
         else:
             print("  No improvement — rule rolled back.")
 
-    print(f"\n[Phase 3] Optimization complete.  Final Dcal QWK = {best_rule.qwk_score:.4f}")
-    return best_rule
-
-
-# ──────────────────────────────────────────────────────────────────
-# Phase 4 — Cognitive-Aligned Execution / 阶段4 — 认知对齐执行
-# ──────────────────────────────────────────────────────────────────
-
-def execute_with_alignment(rule: ScoringRule,
-                           test_essays: List[Essay],
-                           anchor_text: str):
-    """Run Phase 4 if task mode is 'unstructured'.
-    若任务模式为 'unstructured' 则执行阶段4。
-    """
-    from cognitive_alignment import cognitively_aligned_scoring
-    from evaluator import calculate_qwk_detailed
-
-    records = cognitively_aligned_scoring(rule, test_essays, anchor_text)
-    qwk, details = calculate_qwk_detailed(test_essays, records)
-    print(f"\n[Phase 4] Cognitively-Aligned QWK = {qwk:.4f}")
-    print(f"  Adjacent Accuracy = {details.get('adjacent_accuracy', 0):.4f}")
-    print(f"  MAE               = {details.get('mae', 0):.4f}")
-    return records, qwk
+    print(f"\n[Phase 3] Optimization complete.  "
+          f"Final Dcal calibrated QWK = {best_rule.qwk_score:.4f}  "
+          f"alphas = {best_alphas}")
+    return best_rule, best_alphas
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -280,22 +294,17 @@ def execute_with_alignment(rule: ScoringRule,
 
 def run_dd_mari(resume: bool = False) -> ScoringRule:
     """
-    Entry point for the complete DD-MARI pipeline.
-    完整 DD-MARI 流程的入口点。
+    Entry point for the complete DD-MARI pipeline (Algorithm 1).
+    完整 DD-MARI 流程的入口点（算法1）。
 
-    Parameters / 参数
-    ----------
-    resume : if True, loads the latest rule from rule_history.json
-             and skips cold-start + completed iterations.
-             若为 True，从 rule_history.json 加载最新规则，跳过冷启动和已完成的迭代。
-
-    Data split / 数据划分
-    ----------
-    Dcal    : 100 randomly sampled essays used for Phase 3 rollback decisions only.
-              100 篇随机抽样作文，仅用于阶段3回滚决策。
-    Holdout : remaining essays (~1,643) used only for cold-start baseline and
-              final evaluation — never touched during optimization.
-              剩余约1,643篇作文，仅用于冷启动基线和最终评估，优化过程中绝不使用。
+    Phase 1 : DBAP filter training pool (Dpool → Dclean) → build contrastive pairs
+    阶段1   : DBAP 过滤训练池（Dpool → Dclean）→ 构建对比样本对
+    Phase 2 : SGA cold start with Spearman on Dcal + initial Wasserstein calibration
+    阶段2   : SGA 冷启动（Dcal 上的 Spearman 选优）+ 初始 Wasserstein 校准
+    Phase 3 : Defect-driven iteration with intra-loop calibration on Dcal
+    阶段3   : 基于 Dcal 循环内校准的缺陷驱动迭代优化
+    Final   : DBAP inference filter + calibrated QWK on holdout
+    最终    : DBAP 推理过滤 + 保留集上的校准 QWK
     """
     print("=" * 70)
     print("  DD-MARI: Defect-Driven Multi-Agent Rule Induction")
@@ -303,63 +312,73 @@ def run_dd_mari(resume: bool = False) -> ScoringRule:
 
     # Load data / 加载数据
     print("\n[Data] Loading datasets...")
-    gradient_essays = dm.load_gradient_set()
-    training_pairs  = dm.load_training_pairs()
-    test_essays     = dm.load_test_set()
-    doc_content     = dm.load_standard_document()
-    anchor_text     = dm.build_anchor_text(gradient_essays)
+    gradient_essays     = dm.load_gradient_set()
+    all_training_essays = dm.load_all_training_essays()
+    test_essays         = dm.load_test_set()
+    doc_content         = dm.load_standard_document()
+    anchor_text         = dm.build_anchor_text(gradient_essays)
 
-    # Split test set: Dcal (rollback) + holdout (final eval only) — paper §III-C
-    # 划分测试集：Dcal（回滚）+ 保留集（仅最终评估）—— 论文§III-C
+    # Split test set: Dcal (Phase 3 rollback) + holdout (final eval only)
+    # 划分测试集：Dcal（阶段3回滚）+ 保留集（仅最终评估）
     d_cal, holdout_essays = dm.split_test_set(
         test_essays, iter_eval_size=ITER_EVAL_SIZE, seed=ITER_EVAL_SEED
     )
 
-    print(f"  Gradient set    : {len(gradient_essays)} essays")
-    print(f"  Training pairs  : {len(training_pairs)} groups")
+    print(f"  Gradient set    : {len(gradient_essays)} essays  (anchor building)")
+    print(f"  Training pool   : {len(all_training_essays)} essays  (Dpool, before DBAP)")
     print(f"  Dcal (rollback) : {len(d_cal)} essays")
     print(f"  Hold-out (final): {len(holdout_essays)} essays")
-    dm.load_feature_library()   # pre-load feature library / 预加载特征库
+    dm.load_feature_library()
 
-    # ── Phase 2: Cold Start (Spearman on gradient, baseline QWK on hold-out)
-    # 阶段2：冷启动（在梯度集上计算 Spearman，在保留集上计算基线 QWK）
-    start_iter = 1
+    # ── Phase 1: DBAP filter training pool → Dclean → contrastive pairs
+    # 阶段1：DBAP 过滤训练池 → Dclean → 对比样本对
+    print("\n[Phase 1] DBAP Training Pool Filtering...")
+    clean_essays   = dbap_filter(all_training_essays, anchor_text)
+    training_pairs = dm.build_training_pairs(clean_essays)
+    print(f"[Phase 1] Dclean: {len(clean_essays)} essays → {len(training_pairs)} contrastive pairs")
+
+    # ── Phase 2: Cold Start (Spearman on Dcal, Wasserstein calibration)
+    # 阶段2：冷启动（Dcal 上 Spearman 选优，Wasserstein 校准）
+    start_iter  = 1
+    best_alphas = list(CALIB_ALPHAS)
+
     if resume:
         rule = _load_latest_rule()
         if rule:
             print(f"\n[Resume] Loaded checkpoint: {rule.rule_id}  QWK={rule.qwk_score:.4f}")
+            best_alphas = _load_saved_alphas()
             try:
                 start_iter = int(rule.rule_id.lstrip("v")) + 1
             except ValueError:
                 start_iter = 1
         else:
             print("[Resume] No checkpoint found — starting fresh cold start.")
-            rule = cold_start(doc_content, gradient_essays, d_cal,
-                              anchor_text, num_candidates=3)
+            rule, best_alphas = cold_start(doc_content, d_cal, anchor_text, num_candidates=3)
     else:
-        rule = cold_start(doc_content, gradient_essays, d_cal,
-                          anchor_text, num_candidates=3)
+        rule, best_alphas = cold_start(doc_content, d_cal, anchor_text, num_candidates=3)
 
-    # ── Phase 3: Iterative Optimization on Dcal only
-    # 阶段3：仅在 Dcal 上进行迭代优化
-    final_rule = iterative_optimization(
-        rule, training_pairs, d_cal, anchor_text,
+    # ── Phase 3: Iterative Optimization with intra-loop calibration on Dcal
+    # 阶段3：带循环内校准的迭代优化（仅基于 Dcal）
+    final_rule, final_alphas = iterative_optimization(
+        rule, best_alphas, training_pairs, d_cal, anchor_text,
         start_iteration=start_iter,
     )
     _save_rule(final_rule, is_final=True)
+    _save_alphas(final_alphas)
 
-    # ── Final Evaluation on full hold-out set (never seen during optimization)
-    # 在完整保留集上进行最终评估（优化过程中从未使用）
-    print("\n[Final Evaluation] Scoring hold-out test set...")
-    holdout_records = run_sa(final_rule, holdout_essays, anchor_text)
-    holdout_qwk, details = calculate_qwk_detailed(holdout_essays, holdout_records)
-    print(f"[Final Evaluation] Hold-out QWK = {holdout_qwk:.4f}")
+    # ── Final Evaluation: DBAP inference filter + calibration on holdout
+    # 最终评估：DBAP 推理过滤 + 保留集上的校准评估
+    print("\n[Final Evaluation] Running Cognitive Purification Filter on hold-out set...")
+    filtered_holdout = dbap_inference_filter(final_rule, holdout_essays, anchor_text)
+    print(f"  Holdout: {len(holdout_essays)} → {len(filtered_holdout)} essays after DBAP filter")
+
+    print("[Final Evaluation] Scoring filtered hold-out set...")
+    holdout_records = run_sa(final_rule, filtered_holdout, anchor_text)
+    cal_holdout_records = apply_calibration_to_records(holdout_records, final_alphas)
+    holdout_qwk, details = calculate_qwk_detailed(filtered_holdout, cal_holdout_records)
+    print(f"[Final Evaluation] Hold-out calibrated QWK = {holdout_qwk:.4f}")
     print(f"  Adjacent Accuracy = {details.get('adjacent_accuracy', 0):.4f}")
     print(f"  MAE               = {details.get('mae', 0):.4f}")
-
-    # ── Phase 4: Cognitive Alignment (subjective tasks only, on hold-out set)
-    # 阶段4：认知对齐（仅用于主观任务，在保留集上执行）
-    if TASK_MODE == "unstructured":
-        execute_with_alignment(final_rule, holdout_essays, anchor_text)
+    print(f"  Sample Count      = {details.get('sample_count', 0)}")
 
     return final_rule
