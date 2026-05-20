@@ -20,7 +20,7 @@ Official implementation of the paper:
 DD-MARI addresses three black-box problems in automated Document Quality Assessment (DQA):
 
 
-| Problem / 问题 | Source / 来源 | DD-MARI Solution / DD-MARI 解决方案 |
+| Problem | Source  | DD-MARI Solution  |
 |---|---|---|
 | **Parameter Black-Box** | End-to-end neural models | Explicit natural-language scoring rules  |
 | **Logical Black-Box** | Naive LLM self-refinement化 | Defect-driven multi-agent optimization |
@@ -54,7 +54,7 @@ Any OpenAI-compatible endpoint can be used by changing `LLM_BASE_URL` in `.env`.
 
 Download the ASAP dataset from [Kaggle](https://www.kaggle.com/c/asap-aes/data) and place the files in `data/`:
 
-从 [Kaggle](https://www.kaggle.com/c/asap-aes/data) 下载 ASAP 数据集，将文件放入 `data/` 目录：
+ [Kaggle](https://www.kaggle.com/c/asap-aes/data)
 
 
 #### Data Format
@@ -68,9 +68,7 @@ Download the ASAP dataset from [Kaggle](https://www.kaggle.com/c/asap-aes/data) 
 
 #### Training Pool Construction
 
-该 `asap_set1_training.xlsx` file should have an additional column `sample_type`:
-
-`asap_set1_training.xlsx` 需要额外添加 `sample_type` 列：
+ `asap_set1_training.xlsx` file should have an additional column `sample_type`:
 
 | `sample_type` value | Meaning |
 |---|---|
@@ -80,8 +78,6 @@ Download the ASAP dataset from [Kaggle](https://www.kaggle.com/c/asap-aes/data) 
 If `sample_type` is absent, the framework infers it from the `essay_id` string
 (looks for keywords: `aug`， `enhanced`, `negative`, `neg`).
 
-若缺少 `sample_type` 列，框架将从 `essay_id` 字符串自动推断
-（识别关键词：`aug`、`enhanced`、`negative`、`neg`）。
 
 ---
 
@@ -111,7 +107,7 @@ python main.py --eval --test_file data/asap_set1_test.xlsx --output output/resul
 
 ---
 
-## Configuration / 配置项（`config.py`）
+## Configuration 
 
 | Parameter  | Default| Description |
 |---|---|---|
@@ -161,7 +157,7 @@ DD-MARI/
 
 ---
 
-## License / 许可证
+## License 
 
 MIT License. See [LICENSE](LICENSE) for details.
 
