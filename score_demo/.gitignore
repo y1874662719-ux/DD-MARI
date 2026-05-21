@@ -1,0 +1,8 @@
+__pycache__/
+*.py[cod]
+.env
+.pytest_cache/
+.venv/
+data/uploads/
+server_out.txt
+server_err.txt

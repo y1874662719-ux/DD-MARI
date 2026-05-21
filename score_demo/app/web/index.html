@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Essay Scoring</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <main class="shell">
+    <section class="workspace">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">ASAP Set 1 Rubric</p>
+          <h1>Essay Scoring</h1>
+        </div>
+        <div class="score-pill" id="statusPill">Ready</div>
+      </header>
+
+      <section class="editor-panel">
+        <div class="editor-head">
+          <label for="essayInput">Essay</label>
+          <span id="wordCount">0 words</span>
+        </div>
+        <textarea id="essayInput" placeholder="Paste an English essay here..."></textarea>
+        <div class="actions">
+          <button id="scoreButton" type="button">Score Essay</button>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <div class="modal-backdrop hidden" id="resultModal" aria-hidden="true">
+    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <div class="modal-head">
+        <div>
+          <p class="eyebrow">Scoring Result</p>
+          <h2 id="modalTitle">Essay Analysis</h2>
+        </div>
+        <button class="close-button" id="closeModal" type="button" aria-label="Close">x</button>
+      </div>
+      <div class="total-row">
+        <div>
+          <span class="total-label">Total Score</span>
+          <strong id="totalScore">- / 12</strong>
+        </div>
+        <span id="ruleId">Rule -</span>
+      </div>
+      <div class="dimension-grid" id="dimensionGrid"></div>
+    </section>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

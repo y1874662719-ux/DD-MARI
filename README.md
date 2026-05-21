@@ -154,6 +154,38 @@ DD-MARI/
 
 ---
 
+## Citation
+
+```bibtex
+@article{zhu2025ddmari,
+  title     = {Beyond Black-Box Scoring: An Interpretable and Defect-Driven Few-Shot
+               Rule Induction Framework for Document Quality Assessment},
+  author    = {Zhu, Haibo},
+  journal   = {IEEE Transactions on Industrial Informatics},
+  year      = {2025}
+}
+```
+
+---
+
+## Web Demo
+
+A fully functional scoring demo is available in [`score_demo/`](score_demo/).
+It wraps the DD-MARI induced rule into a FastAPI + HTML/JS web interface.
+
+```bash
+cd score_demo
+cp .env.example .env      # fill in your LLM API key
+pip install fastapi uvicorn pydantic pydantic-settings
+uvicorn app.main:app --reload --port 8000
+# Open http://localhost:8000
+```
+
+### Demo Video
+
+<video src="Demo.mp4" controls width="100%"></video>
+
+> [▶ Watch Demo.mp4](Demo.mp4)
 
 ---
 

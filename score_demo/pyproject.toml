@@ -1,0 +1,15 @@
+[project]
+name = "essay-scoring-service"
+version = "0.1.0"
+description = "A lightweight FastAPI service for scoring English essays with a four-dimension rubric."
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115.0",
+    "pydantic>=2.11.0",
+    "pydantic-settings>=2.8.0",
+    "uvicorn>=0.34.0",
+]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
