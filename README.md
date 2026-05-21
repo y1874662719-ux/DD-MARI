@@ -183,9 +183,7 @@ uvicorn app.main:app --reload --port 8000
 
 ### Demo Video
 
-<video src="Demo.mp4" controls width="100%"></video>
-
-> [▶ Watch Demo.mp4](Demo.mp4)
+https://github.com/user-attachments/assets/6920bfda-f95d-46da-ad7f-70e47ad4d0d9
 
 ---
 
