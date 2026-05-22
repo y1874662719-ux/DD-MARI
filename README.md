@@ -179,7 +179,7 @@ DD-MARI has been successfully deployed in a real-world industrial project with C
 
 The following video demonstrates the deployed system in action sensitive information has been desensitized 
 
-https://github.com/user-attachments/assets/9d06b64e-fb5a-424e-b659-9666d51070f4
+https://github.com/user-attachments/assets/d91aee67-f046-4d39-b1fc-45ffc5228e3e
 
 ---
 
