@@ -172,6 +172,18 @@ https://github.com/user-attachments/assets/6920bfda-f95d-46da-ad7f-70e47ad4d0d9
 
 ---
 
+## Real-World Deployment / 实际落地应用
+
+DD-MARI has been successfully deployed in a real-world industrial project with **China Southern Power Grid (南方电网)**, demonstrating its practical applicability beyond academic benchmarks.
+
+DD-MARI 已成功落地至**南方电网**的实际工程项目中，验证了该框架在学术基准之外的工业可用性。
+
+The following video demonstrates the deployed system in action (sensitive information has been desensitized / 以下演示视频已做脱敏处理):
+
+https://github.com/user-attachments/assets/9d06b64e-fb5a-424e-b659-9666d51070f4
+
+---
+
 ## License 
 
 MIT License. See [LICENSE](LICENSE) for details.
