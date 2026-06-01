@@ -23,7 +23,7 @@ DD-MARI addresses three black-box problems in automated Document Quality Assessm
 | Problem | Source  | DD-MARI Solution  |
 |---|---|---|
 | **Parameter Black-Box** | End-to-end neural models | Explicit natural-language scoring rules  |
-| **Logical Black-Box** | Naive LLM self-refinement化 | Defect-driven multi-agent optimization |
+| **Logical Black-Box** | Naive LLM self-refinement | Defect-driven multi-agent optimization |
 | **Cognitive Black-Box** | Human–AI psychometric misalignment  | DBAP pre-screening + intra-loop Wasserstein calibration  |
 ---
 ---
