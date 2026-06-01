@@ -3,8 +3,8 @@ DD-MARI Main Workflow / DD-MARI 主工作流
 Implements Algorithm 1 from the paper:
 实现论文中的算法1：
 
-  Phase 1 — DBAP Training Pool Filtering (Dpool → Dclean)
-  阶段1 — DBAP 训练池过滤（Dpool → Dclean）
+  Phase 1 — CDAP Training Pool Filtering (Dpool → Dclean)
+  阶段1 — CDAP 训练池过滤（Dpool → Dclean）
 
   Phase 2 — Spearman-Guided Cold-Start Initialization (on Dcal)
   阶段2 — Spearman 引导的冷启动初始化（基于 Dcal）
@@ -12,8 +12,8 @@ Implements Algorithm 1 from the paper:
   Phase 3 — RAG-Enhanced Iterative Optimization with Intra-Loop Calibration
   阶段3 — 带循环内校准的 RAG 增强迭代优化
 
-  Final  — Cognitive Purification Filter (DBAP inference) + Calibrated QWK on holdout
-  最终   — 认知净化过滤器（DBAP 推理）+ 保留集上的校准 QWK
+  Final  — Cognitive Purification Filter (CDAP inference) + Calibrated QWK on holdout
+  最终   — 认知净化过滤器（CDAP 推理）+ 保留集上的校准 QWK
 """
 
 import json
@@ -31,7 +31,7 @@ from data_models import Essay, ScoringRule, FeatureEntry
 from agents import run_sga, run_sa, run_dda, run_roa
 from evaluator import calculate_qwk, calculate_qwk_detailed
 from cognitive_alignment import (
-    dbap_filter, dbap_inference_filter,
+    cdap_filter, cdap_inference_filter,
     grid_search_alphas, apply_calibration_to_records,
 )
 import data_manager as dm
@@ -297,14 +297,14 @@ def run_dd_mari(resume: bool = False) -> ScoringRule:
     Entry point for the complete DD-MARI pipeline (Algorithm 1).
     完整 DD-MARI 流程的入口点（算法1）。
 
-    Phase 1 : DBAP filter training pool (Dpool → Dclean) → build contrastive pairs
-    阶段1   : DBAP 过滤训练池（Dpool → Dclean）→ 构建对比样本对
+    Phase 1 : CDAP filter training pool (Dpool → Dclean) → build contrastive pairs
+    阶段1   : CDAP 过滤训练池（Dpool → Dclean）→ 构建对比样本对
     Phase 2 : SGA cold start with Spearman on Dcal + initial Wasserstein calibration
     阶段2   : SGA 冷启动（Dcal 上的 Spearman 选优）+ 初始 Wasserstein 校准
     Phase 3 : Defect-driven iteration with intra-loop calibration on Dcal
     阶段3   : 基于 Dcal 循环内校准的缺陷驱动迭代优化
-    Final   : DBAP inference filter + calibrated QWK on holdout
-    最终    : DBAP 推理过滤 + 保留集上的校准 QWK
+    Final   : CDAP inference filter + calibrated QWK on holdout
+    最终    : CDAP 推理过滤 + 保留集上的校准 QWK
     """
     print("=" * 70)
     print("  DD-MARI: Defect-Driven Multi-Agent Rule Induction")
@@ -325,15 +325,15 @@ def run_dd_mari(resume: bool = False) -> ScoringRule:
     )
 
     print(f"  Gradient set    : {len(gradient_essays)} essays  (anchor building)")
-    print(f"  Training pool   : {len(all_training_essays)} essays  (Dpool, before DBAP)")
+    print(f"  Training pool   : {len(all_training_essays)} essays  (Dpool, before CDAP)")
     print(f"  Dcal (rollback) : {len(d_cal)} essays")
     print(f"  Hold-out (final): {len(holdout_essays)} essays")
     dm.load_feature_library()
 
-    # ── Phase 1: DBAP filter training pool → Dclean → contrastive pairs
-    # 阶段1：DBAP 过滤训练池 → Dclean → 对比样本对
-    print("\n[Phase 1] DBAP Training Pool Filtering...")
-    clean_essays   = dbap_filter(all_training_essays, anchor_text)
+    # ── Phase 1: CDAP filter training pool → Dclean → contrastive pairs
+    # 阶段1：CDAP 过滤训练池 → Dclean → 对比样本对
+    print("\n[Phase 1] CDAP Training Pool Filtering...")
+    clean_essays   = cdap_filter(all_training_essays, anchor_text)
     training_pairs = dm.build_training_pairs(clean_essays)
     print(f"[Phase 1] Dclean: {len(clean_essays)} essays → {len(training_pairs)} contrastive pairs")
 
@@ -366,11 +366,11 @@ def run_dd_mari(resume: bool = False) -> ScoringRule:
     _save_rule(final_rule, is_final=True)
     _save_alphas(final_alphas)
 
-    # ── Final Evaluation: DBAP inference filter + calibration on holdout
-    # 最终评估：DBAP 推理过滤 + 保留集上的校准评估
+    # ── Final Evaluation: CDAP inference filter + calibration on holdout
+    # 最终评估：CDAP 推理过滤 + 保留集上的校准评估
     print("\n[Final Evaluation] Running Cognitive Purification Filter on hold-out set...")
-    filtered_holdout = dbap_inference_filter(final_rule, holdout_essays, anchor_text)
-    print(f"  Holdout: {len(holdout_essays)} → {len(filtered_holdout)} essays after DBAP filter")
+    filtered_holdout = cdap_inference_filter(final_rule, holdout_essays, anchor_text)
+    print(f"  Holdout: {len(holdout_essays)} → {len(filtered_holdout)} essays after CDAP filter")
 
     print("[Final Evaluation] Scoring filtered hold-out set...")
     holdout_records = run_sa(final_rule, filtered_holdout, anchor_text)

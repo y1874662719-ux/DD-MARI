@@ -156,8 +156,8 @@ def load_training_pairs() -> List[Tuple[Essay, List[Essay]]]:
 
 def load_all_training_essays() -> List[Essay]:
     """
-    Load all training pool essays as a flat list (Dpool, before DBAP filtering).
-    将训练池所有样本加载为扁平列表（Dpool，DBAP 过滤前）。
+    Load all training pool essays as a flat list (Dpool, before CDAP filtering).
+    将训练池所有样本加载为扁平列表（Dpool，CDAP 过滤前）。
     """
     df = pd.read_excel(TRAINING_DATA_FILE)
     id_col, text_col, score_col = _resolve_cols(df)

@@ -63,9 +63,9 @@ ENABLE_COGNITIVE_ALIGNMENT = True
 CALIB_KAPPA  = 1.0              # κ: unit mapping amplitude / κ：单位映射幅度
 CALIB_ALPHAS = [0.5, 1.2]       # {α_1, α_2}: default psychological damping coefficients / 默认心理阻尼系数
 
-# DBAP threshold — τN: essays with |SA - SB| >= DBAP_THRESHOLD are filtered (Phase 1 & inference)
-# DBAP 阈值 —— τN：|SA - SB| >= 阈值的样本被过滤（阶段1 和推理期）
-DBAP_THRESHOLD = 3.0
+# CDAP threshold — τN: essays with |SA - SB| >= CDAP_TAU_N are filtered (Phase 1 & inference)
+# CDAP 阈值 —— τN：|SA - SB| >= 阈值的样本被过滤（阶段1 和推理期）
+CDAP_TAU_N = 3.0
 
 # Grid search candidates for αi in intra-loop Wasserstein calibration (Phase 3)
 # 阶段3 循环内 Wasserstein 校准的 αi 网格搜索候选值

@@ -33,15 +33,15 @@ def run_evaluation(test_file: str, output_file: str = "output/eval_result.xlsx")
     """
     Load the final induced rule and evaluate it on any ASAP-format test file.
     加载最终归纳规则并在任意 ASAP 格式的测试文件上进行评估。
-    Applies DBAP Cognitive Purification Filter and nonlinear calibration.
-    应用 DBAP 认知净化过滤器和非线性校准。
+    Applies CDAP Cognitive Purification Filter and nonlinear calibration.
+    应用 CDAP 认知净化过滤器和非线性校准。
     """
     from config import FINAL_RULE_FILE, FINAL_ALPHAS_FILE, SCORE_MIN, SCORE_MAX
     from data_models import ScoringRule, Essay, SampleType
     from data_manager import load_gradient_set, build_anchor_text
     from agents import run_sa
     from evaluator import calculate_qwk_detailed
-    from cognitive_alignment import dbap_inference_filter, apply_calibration_to_records
+    from cognitive_alignment import cdap_inference_filter, apply_calibration_to_records
 
     # Load rule / 加载规则
     if not FINAL_RULE_FILE.exists():
@@ -84,9 +84,9 @@ def run_evaluation(test_file: str, output_file: str = "output/eval_result.xlsx")
     gradient = load_gradient_set()
     anchor_text = build_anchor_text(gradient)
 
-    # Apply DBAP Cognitive Purification Filter / 应用 DBAP 认知净化过滤器
-    print(f"[Eval] Running DBAP Cognitive Purification Filter on {len(essays)} essays...")
-    filtered_essays = dbap_inference_filter(rule, essays, anchor_text)
+    # Apply CDAP Cognitive Purification Filter / 应用 CDAP 认知净化过滤器
+    print(f"[Eval] Running CDAP Cognitive Purification Filter on {len(essays)} essays...")
+    filtered_essays = cdap_inference_filter(rule, essays, anchor_text)
     print(f"[Eval] Retained {len(filtered_essays)} / {len(essays)} essays after filter.")
 
     # Score filtered essays and apply calibration / 对过滤后的样本评分并应用校准

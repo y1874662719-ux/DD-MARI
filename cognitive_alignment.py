@@ -4,8 +4,8 @@ DD-MARI Cognitive Alignment Module / DD-MARI 认知对齐模块
 Implements two operators described in the paper:
 实现论文描述的两个算子：
 
-Operator 1 — DBAP (Double-Blind Arbitration Pre-Screener)
-算子1 — DBAP（双盲仲裁预筛选器）
+Operator 1 — CDAP (Contrastive Divergence Arbitration Pre-Screener)
+算子1 — CDAP（对比散度仲裁预筛选器）
   Used in two places / 在两处使用:
   Phase 1: Filter the training pool (no rule, simplified holistic prompts) → Dclean
   阶段1：过滤训练池（无规则，简化整体提示）→ Dclean
@@ -33,17 +33,17 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from config import (
     LLM_API_KEY, LLM_BASE_URL, LLM_MODEL_NAME,
     SCORE_MIN, SCORE_MAX, CALIB_KAPPA, CALIB_ALPHAS,
-    DBAP_THRESHOLD, CALIB_ALPHA_GRID,
+    CDAP_TAU_N, CALIB_ALPHA_GRID,
 )
 from data_models import Essay, ScoringRule, EvaluationRecord
 
 
 # ──────────────────────────────────────────────────────────────────
-# Phase 1 DBAP prompts — no rule, simplified holistic assessment
-# 阶段1 DBAP 提示词 —— 无规则，简化整体评估
+# Phase 1 CDAP prompts — no rule, simplified holistic assessment
+# 阶段1 CDAP 提示词 —— 无规则，简化整体评估
 # ──────────────────────────────────────────────────────────────────
 
-_DBAP_A_SYSTEM = """You are a professional essay scorer.
+_CDAP_A_SYSTEM = """You are a professional essay scorer.
 Score the essay holistically on a {score_min}–{score_max} scale.
 
 [Calibration Anchors]:
@@ -54,7 +54,7 @@ Longer essays generally demonstrate better elaboration and should tend toward hi
 
 Output only JSON: {{"total_score": integer}}"""
 
-_DBAP_B_SYSTEM = """You are a professional essay scorer.
+_CDAP_B_SYSTEM = """You are a professional essay scorer.
 Score the essay holistically on a {score_min}–{score_max} scale.
 
 [Calibration Anchors]:
@@ -67,15 +67,15 @@ Tags starting with @ are privacy markers — ignore them entirely.
 
 Output only JSON: {{"total_score": integer}}"""
 
-_DBAP_USER = """Essay:
+_CDAP_USER = """Essay:
 {essay_content}
 
 Output only JSON: {{"total_score": integer}}"""
 
 
 # ──────────────────────────────────────────────────────────────────
-# Final Inference DBAP prompts — with rule
-# 最终推理 DBAP 提示词 —— 含规则
+# Final Inference CDAP prompts — with rule
+# 最终推理 CDAP 提示词 —— 含规则
 # ──────────────────────────────────────────────────────────────────
 
 _INFER_A_SYSTEM = """You are a professional essay scorer.
@@ -136,34 +136,34 @@ def _parse_score(text: str) -> int:
 
 
 # ──────────────────────────────────────────────────────────────────
-# Operator 1a — Phase 1: DBAP Training Pool Filter
-# 算子1a — 阶段1：DBAP 训练池过滤
+# Operator 1a — Phase 1: CDAP Training Pool Filter
+# 算子1a — 阶段1：CDAP 训练池过滤
 # ──────────────────────────────────────────────────────────────────
 
-def _dbap_score_essay(essay: Essay, anchor_text: str, agent: str) -> int:
-    """Score a single essay with the simplified Phase 1 DBAP agent (no rule)."""
+def _cdap_score_essay(essay: Essay, anchor_text: str, agent: str) -> int:
+    """Score a single essay with the simplified Phase 1 CDAP agent (no rule)."""
     llm = _get_llm()
-    system_tpl = _DBAP_A_SYSTEM if agent == "A" else _DBAP_B_SYSTEM
+    system_tpl = _CDAP_A_SYSTEM if agent == "A" else _CDAP_B_SYSTEM
     system = system_tpl.format(
         score_min=SCORE_MIN, score_max=SCORE_MAX, anchor_text=anchor_text
     )
-    user = _DBAP_USER.format(essay_content=essay.essay_content)
+    user = _CDAP_USER.format(essay_content=essay.essay_content)
     try:
         resp = llm.invoke([SystemMessage(content=system), HumanMessage(content=user)])
         return max(SCORE_MIN, min(SCORE_MAX, _parse_score(resp.content)))
     except Exception as e:
-        print(f"[DBAP] Scoring error for {essay.essay_id}: {e}")
+        print(f"[CDAP] Scoring error for {essay.essay_id}: {e}")
         return SCORE_MIN
 
 
-def dbap_filter(
+def cdap_filter(
     essays: List[Essay],
     anchor_text: str,
-    threshold: float = DBAP_THRESHOLD,
+    threshold: float = CDAP_TAU_N,
 ) -> List[Essay]:
     """
-    Phase 1: DBAP filter on training pool (Dpool → Dclean).
-    阶段1：对训练池执行 DBAP 过滤（Dpool → Dclean）。
+    Phase 1: CDAP filter on training pool (Dpool → Dclean).
+    阶段1：对训练池执行 CDAP 过滤（Dpool → Dclean）。
 
     Runs Agent A (length-sensitive) and Agent B (desensitized) in parallel.
     并行运行智能体A（长度敏感）和智能体B（脱敏）。
@@ -172,10 +172,10 @@ def dbap_filter(
 
     Returns / 返回: Dclean (filtered essay list)
     """
-    print(f"[DBAP Phase 1] Filtering {len(essays)} training essays (τN = {threshold})...")
+    print(f"[CDAP Phase 1] Filtering {len(essays)} training essays (τN = {threshold})...")
     with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool:
-        futs_a = [pool.submit(_dbap_score_essay, e, anchor_text, "A") for e in essays]
-        futs_b = [pool.submit(_dbap_score_essay, e, anchor_text, "B") for e in essays]
+        futs_a = [pool.submit(_cdap_score_essay, e, anchor_text, "A") for e in essays]
+        futs_b = [pool.submit(_cdap_score_essay, e, anchor_text, "B") for e in essays]
         scores_a = [f.result() for f in futs_a]
         scores_b = [f.result() for f in futs_b]
 
@@ -189,7 +189,7 @@ def dbap_filter(
             filtered_count += 1
             print(f"  Filtered: {essay.essay_id}  N={n}  (SA={sa}, SB={sb})")
 
-    print(f"[DBAP Phase 1] {filtered_count} essays removed. Dclean: {len(clean)} essays.")
+    print(f"[CDAP Phase 1] {filtered_count} essays removed. Dclean: {len(clean)} essays.")
     return clean
 
 
@@ -199,7 +199,7 @@ def dbap_filter(
 # ──────────────────────────────────────────────────────────────────
 
 def _infer_score_essay(rule: ScoringRule, essay: Essay, anchor_text: str, agent: str) -> int:
-    """Score a single essay using the inference DBAP agent (with rule)."""
+    """Score a single essay using the inference CDAP agent (with rule)."""
     llm = _get_llm()
     system_tpl = _INFER_A_SYSTEM if agent == "A" else _INFER_B_SYSTEM
     system = system_tpl.format(rule_content=rule.rule_content, anchor_text=anchor_text)
@@ -208,15 +208,15 @@ def _infer_score_essay(rule: ScoringRule, essay: Essay, anchor_text: str, agent:
         resp = llm.invoke([SystemMessage(content=system), HumanMessage(content=user)])
         return max(SCORE_MIN, min(SCORE_MAX, _parse_score(resp.content)))
     except Exception as e:
-        print(f"[DBAP Inference] Scoring error for {essay.essay_id}: {e}")
+        print(f"[CDAP Inference] Scoring error for {essay.essay_id}: {e}")
         return SCORE_MIN
 
 
-def dbap_inference_filter(
+def cdap_inference_filter(
     rule: ScoringRule,
     essays: List[Essay],
     anchor_text: str,
-    threshold: float = DBAP_THRESHOLD,
+    threshold: float = CDAP_TAU_N,
 ) -> List[Essay]:
     """
     Cognitive Purification Filter applied during final inference.
@@ -227,7 +227,7 @@ def dbap_inference_filter(
 
     Returns / 返回: filtered essay list (anomalous essays excluded)
     """
-    print(f"[DBAP Inference] Filtering {len(essays)} holdout essays (τN = {threshold})...")
+    print(f"[CDAP Inference] Filtering {len(essays)} holdout essays (τN = {threshold})...")
     with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool:
         futs_a = [pool.submit(_infer_score_essay, rule, e, anchor_text, "A") for e in essays]
         futs_b = [pool.submit(_infer_score_essay, rule, e, anchor_text, "B") for e in essays]
@@ -244,7 +244,7 @@ def dbap_inference_filter(
             filtered_count += 1
 
     rate = filtered_count / max(len(essays), 1) * 100
-    print(f"[DBAP Inference] {filtered_count} essays removed ({rate:.1f}%). "
+    print(f"[CDAP Inference] {filtered_count} essays removed ({rate:.1f}%). "
           f"Retained: {len(clean)} essays.")
     return clean
 
